@@ -47,7 +47,7 @@ sub irand {
 	my @list;
 	if (-r $path) {
 		sysopen RANDOM, $path, 0;
-		for my $i (1 .. $count) {
+		for (1 .. $count) {
 			my $rt = '';
 			while ($rt eq '' || ord($rt) > $max) {
 				sysread  RANDOM, $rt, 1;
