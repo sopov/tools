@@ -1,0 +1,65 @@
+#!/usr/bin/perl
+#
+# Strong Password Generator
+# Run as:
+#   passgen <nums|chars|all> <size>
+# Default: chars 16 symbols
+#
+# Password exclude chars: i I l L 1 & o O 0
+#
+# Leonid Sopov <leonid@sopov.org>
+# 
+
+use strict;
+use Time::HiRes;
+use v5.10;
+
+my $path = '/dev/random'; # /dev/urandom
+my $len = 16;
+my $fmt = 'c';
+
+for (@ARGV) {
+	$len = $_ if /^\d+$/ && $_ > 0;
+	$fmt  = lc($1) if /^([nma])/i;
+}
+
+my $chars = dict($fmt);
+
+say join '', map { $chars->[ $_ ] } irand(~~ @$chars, $len);
+
+sub dict {
+	my $fmt = shift;
+	my @spec = qw!% $ _ - ~ + * & / = #!;
+	my @nums = ( 0 .. 9 );
+	my @char = ( 'a' .. 'z', 'A' .. 'Z' );
+	my $dicts = {
+		n  => [ @nums ],
+		c => [ grep {!/[iIlL1oO0]/}  @nums, @char ], # exclude i I l L 1 & o O 0 
+		a => [ grep {!/[iIlL1oO0]/}  @spec, @nums, @char ]
+	};
+	return exists $dicts->{$fmt} ? $dicts->{$fmt}  : $dicts->{chars};
+}
+
+sub irand {
+	my $size = shift;
+	my $count = shift || 1;
+	my $max = int(256/$size)*$size - 1;
+	my @list;
+	if (-r $path) {
+		sysopen RANDOM, $path, 0;
+		for my $i (1 .. $count) {
+			my $rt = '';
+			while ($rt eq '' || ord($rt) > $max) {
+				sysread  RANDOM, $rt, 1;
+				unless (ord($rt) > $max) {
+					push @list, ord($rt) % $size;
+				}
+			}
+		}
+	} else {
+		my (undef, $seed) = split /\./, sprintf "%0.16f", Time::HiRes::time;
+		srand( $seed );
+		@list = map { int(rand($size)) } (1.. $count)
+	}
+	return @list;
+}
