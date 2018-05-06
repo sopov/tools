@@ -25,7 +25,11 @@ for (@ARGV) {
 
 my $chars = dict($fmt);
 
-say join '', map { $chars->[ $_ ] } irand(~~ @$chars, $len);
+my $pwd = join '', map { $chars->[ $_ ] } irand(~~ @$chars, $len);
+say $pwd;
+open CP, "|pbcopy";
+print CP $pwd;
+close CP;
 
 sub dict {
 	my $fmt = shift;
