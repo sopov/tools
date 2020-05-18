@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!perl
 #
 # Strong Password Generator
 # Run as:
@@ -8,62 +8,79 @@
 # Password exclude chars: i I l L 1 & o O 0
 #
 # Leonid Sopov <leonid@sopov.org>
-# 
+#
 
 use strict;
-use Time::HiRes;
-use v5.10;
+use warnings;
 
-my $path = '/dev/random'; # /dev/urandom
-my $len = 16;
-my $fmt = 'c';
+use version; our $VERSION = qv('v0.2');    # Mon May 18 23:35:13 2020
+
+use Time::HiRes;
+use autodie;
+use Readonly;
+
+my $MASK           => 256;
+my $EMPTY          => q{};
+my $RANDOM_STREAM  => '/dev/random';
+my $DEFAULT_LEN    => 16;
+my $DEFAULT_FORMAT => q{c}                 # n - numbers, c - chars, a - any
+
+    my $len = $DEFAULT_LEN;
+my $fmt = $DEFAULT_FORMAT;
 
 for (@ARGV) {
-	$len = $_ if /^\d+$/ && $_ > 0;
-	$fmt  = lc($1) if /^([nma])/i;
+    if ( /^\d+$/ && $_ > 0 ) {
+        $len = $_;
+    }
+    if (/^([nca])/i) {
+        $fmt = lc $1;
+    }
 }
 
 my $chars = dict($fmt);
 
-my $pwd = join '', map { $chars->[ $_ ] } irand(~~ @$chars, $len);
-say $pwd;
-open CP, "|pbcopy";
-print CP $pwd;
-close CP;
+my $pwd = join $EMPTY, map { $chars->[$_] } irand( scalar @{$chars}, $len );
+printf "%s\n", $pwd;
+open my $copy_handle, q{|}, 'pbcopy';
+print {$copy_handle} $pwd;
+close $copy_handle;
 
 sub dict {
-	my $fmt = shift;
-	my @spec = qw!% $ _ - ~ + * & / = #!;
-	my @nums = ( 0 .. 9 );
-	my @char = ( 'a' .. 'z', 'A' .. 'Z' );
-	my $dicts = {
-		n  => [ @nums ],
-		c => [ grep {!/[iIlL1oO0]/}  @nums, @char ], # exclude i I l L 1 & o O 0 
-		a => [ grep {!/[iIlL1oO0]/}  @spec, @nums, @char ]
-	};
-	return exists $dicts->{$fmt} ? $dicts->{$fmt}  : $dicts->{chars};
+    my $format = shift;
+    my @spec   = qw{% $ _ - ~ + * & / = ,};
+    my @nums   = ( '0' .. '9' );
+    my @char   = ( 'a' .. 'z', 'A' .. 'Z' );
+    my $dicts  = {
+        n => [@nums],
+        c => [ grep { !/[iIlL1oO0]/ } @nums, @char ],         # exclude i I l L 1 & o O 0
+        a => [ grep { !/[iIlL1oO0]/ } @spec, @nums, @char ]
+    };
+    return exists $dicts->{$format} ? $dicts->{$format} : $dicts->{'c'};
 }
 
 sub irand {
-	my $size = shift;
-	my $count = shift || 1;
-	my $max = int(256/$size)*$size - 1;
-	my @list;
-	if (-r $path) {
-		sysopen RANDOM, $path, 0;
-		for (1 .. $count) {
-			my $rt = '';
-			while ($rt eq '' || ord($rt) > $max) {
-				sysread  RANDOM, $rt, 1;
-				unless (ord($rt) > $max) {
-					push @list, ord($rt) % $size;
-				}
-			}
-		}
-	} else {
-		my (undef, $seed) = split /\./, sprintf "%0.16f", Time::HiRes::time;
-		srand( $seed );
-		@list = map { int(rand($size)) } (1.. $count)
-	}
-	return @list;
+    my $size  = shift;
+    my $count = shift || 1;
+    my $max   = int( $MASK / $size ) * $size - 1;
+
+    if ( !-r $RANDOM_STREAM ) {
+        my ( undef, $seed ) = split /[.]/, sprintf '%0.16f', Time::HiRes::time;
+        srand $seed;
+        return map { int rand $size } ( 1 .. $count );
+
+    }
+
+    my @list;
+    sysopen RANDOM, $RANDOM_STREAM, 0;
+    for ( 1 .. $count ) {
+        my $rt = $EMPTY;
+        while ( $rt eq $EMPTY || ord($rt) > $max ) {
+            sysread RANDOM, $rt, 1;
+            if ( ord($rt) <= $max ) {
+                push @list, ord($rt) % $size;
+            }
+        }
+    }
+
+    return @list;
 }
